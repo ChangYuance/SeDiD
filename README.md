@@ -84,13 +84,5 @@ python run_5fold.py --method V2 --fold 0 --ablation w/o_ctc
 
 ## Citation
 
-If you use this code in your research, please cite:
-
-```bibtex
-@inproceedings{chang2027cmma,
-  title={Confusion Matrix Guided Multi-Annotator Fusion for Dysarthria Severity Classification on SenseVoice},
-  author={Chang, Yuance and Ding, Han},
-  booktitle={Proceedings of the IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
-  year={2027}
-}
-```
+The paper is currently under review. If you use this code in your research,
+please cite it once the final venue and reference are available.
