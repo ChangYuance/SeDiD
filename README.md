@@ -6,47 +6,48 @@ This repository provides the reference implementation for the ICASSP 2027 submis
 
 ## Method
 
-The model fine-tunes the full SenseVoice encoder (221M parameters) on raw speech and combines four objectives:
+The model fine-tunes the full SenseVoice encoder (221M parameters) on raw speech and combines three objectives (paper Eq. 6, `L = L_CE + L_focal + L_CTC`):
 
-1. **SeDiD multi-annotator fusion** — an instance-dependent confusion matrix `M^k(x)` is generated per utterance for each annotator `k`, and each annotator's prediction is obtained as `q_k = pᵀ M^k(x)`, where `p` is the 4-class model output. The cross-entropy between `q_k` and annotator `k`'s label `y_k` aligns the model with each annotator's individual labeling behavior, in contrast to global (input-independent) confusion matrices.
-2. **Focal loss** on the D2 binary (severe vs. non-severe) head for class imbalance.
-3. **CTC auxiliary loss** on the counting task (phonetic regularization).
-4. **Trace regularization** on the confusion matrices.
+1. **Individual clinician supervision (CICM)** — an instance-dependent confusion matrix `C^k(x)` is generated per utterance for each clinician `k`, and that clinician's predicted rating distribution is `q_k = pᵀ C^k(x)`, where `p` is the 4-class model output. The cross-entropy between `q_k` and clinician `k`'s rating `y_k` aligns the model with each clinician's individual labeling behavior, in contrast to a fixed clinician-level confusion matrix.
+2. **Consensus-guided focal supervision** (`L_focal`) — a focal loss on the consensus label (the median of the three ratings), weighted by how unanimous the clinicians were, together with a binary focal loss on the normal-vs-dysarthric decision. Inverse-frequency class weights compensate for the imbalance.
+3. **CTC auxiliary supervision** (`L_CTC`) — a CTC branch over the known transcript, used during training only.
+
+The detection task is binary normal-vs-dysarthric (`BIN_THRESH = 1`, i.e. severity 0 vs `{1,2,3}`); the 4-class severity accuracy is reported as a secondary metric.
 
 ## Results (5-fold, seed 42)
 
+Mean over the five folds; per-fold numbers are appended to
+`analytics/results_5fold.json` by the run itself.
+
 | Method | Pos. F1 | Macro F1 | 4-cls Acc |
 |--------|:-------:|:--------:|:---------:|
-| *Single-annotator* | | | |
-| MFCCStats | 0.4839 | 0.6647 | 0.7137 |
-| MFCCFusion | 0.5248 | 0.6033 | 0.5362 |
-| WhisperProbe-Mid | 0.6806 | 0.7861 | 0.7740 |
-| CoarseToFine | 0.7225 | 0.8178 | -- |
-| WhisperFT | 0.6752 | 0.7825 | 0.7724 |
-| *Multi-annotator* | | | |
-| CrowdLayer | 0.7962 | 0.8659 | 0.8375 |
-| CrowdAttention | 0.7760 | 0.8527 | 0.8214 |
-| COINNet | 0.8071 | 0.8723 | 0.8473 |
-| LFCx | 0.8048 | 0.8667 | 0.8099 |
-| Tanno | 0.8011 | 0.8689 | 0.8392 |
 | **Ours (SeDiD)** | **0.8331** | **0.8882** | **0.8489** |
+
+`run_5fold.py` also contains the nine baseline implementations compared against
+in the paper; only the SeDiD configuration is documented below.
 
 ## Ablation (5-fold, seed 42)
 
-| Variant | Pos. F1 | Macro F1 | 4-cls Acc |
-|---------|:-------:|:--------:|:---------:|
-| Ours (full) | 0.8331 | 0.8882 | 0.8489 |
-| w/o Multi-Annotator | 0.8022 | 0.8687 | 0.8327 |
-| w/o CTC | 0.8021 | 0.8693 | 0.8408 |
-| w/o Focal | 0.8035 | 0.8707 | 0.8457 |
+| Variant | `--ablation` | Pos. F1 | Macro F1 | 4-cls Acc |
+|---------|--------------|:-------:|:--------:|:---------:|
+| Ours (full) | — | 0.8331 | 0.8882 | 0.8489 |
+| w/o CICM | `w/o_multiannotator` | 0.8022 | 0.8687 | 0.8327 |
+| w/o L_CTC | `w/o_ctc` | 0.8021 | 0.8693 | 0.8408 |
+| w/o L_focal | `w/o_focal` | 0.8035 | 0.8707 | 0.8457 |
+| Global C^k | `global_cm` | 0.8123 | 0.8753 | 0.8457 |
+
+`Global C^k` replaces the utterance-dependent confusion matrix `C^k(x)` with a
+fixed matrix for each clinician.
 
 ## Repository structure
 
 ```
-model.py                  # SenseVoiceMultiAnnotator: SeDiD fusion model (V2)
+model.py                  # SenseVoiceMultiAnnotator: SeDiD fusion model
+comparison_models.py      # Baseline models compared against in the paper
 dys_model_sensevoice.py   # Vendored SenseVoice encoder module (required import)
 data_loader.py            # Audio + multi-annotator label loading
-run_5fold.py              # 5-fold training & evaluation for V2 and baselines
+train_utils.py            # Device selection, LR schedule
+run_5fold.py              # 5-fold training & evaluation
 fold_indices.json         # The exact 5-fold split used in the paper
 requirements.txt          # Python dependencies
 ```
@@ -75,9 +76,20 @@ CSD615_ROOT/
 
 The pre-fine-tuned SenseVoice checkpoint used as the initialization for full fine-tuning is also not distributed; set `SENSEVOICE_CKPT` to a local copy.
 
+The three annotator label columns of `labels_三位医生标记.xlsx` are headed by the
+annotators' names, which are deliberately not committed here. Set
+`CSD615_LABEL_COLUMNS` to those three header names, comma-separated in
+annotator order (`A,B,C`; the third column is the one that falls back to `A`
+when empty):
+
+```bash
+export CSD615_LABEL_COLUMNS="<col_a>,<col_b>,<col_c>"
+```
+
+
 ## Usage
 
-Reproduce the V2 (full) result (canonical configuration: seed 42, learning rate `5e-5`, batch size 4, gradient accumulation 4, 100 max epochs, early stopping patience 20, warmup ratio 0.2, focal `gamma=2.0`, `lambda_conf=1.0`):
+Reproduce the SeDiD result (canonical configuration: seed 42, learning rate `5e-5`, batch size 4, gradient accumulation 4, 100 max epochs, early stopping patience 20, warmup ratio 0.2, focal `gamma=2.0`, `lambda_conf=1.0`):
 
 ```bash
 for fold in 0 1 2 3 4; do
@@ -87,16 +99,10 @@ done
 
 `--seed` defaults to the canonical seed 42 (recorded as `None` in `analytics/results_5fold.json`). Results for each fold are appended to `analytics/results_5fold.json`.
 
-### Baselines and ablations
+An ablation row is reproduced by adding its `--ablation` value from the table above, e.g.:
 
 ```bash
-# Multi-annotator baselines (each reported under its proposed objective)
-python run_5fold.py --method CrowdLayer --fold 0 --focal_gamma 0
-python run_5fold.py --method Tanno      --fold 0
-
-# Ablations of V2
-python run_5fold.py --method V2 --fold 0 --ablation w/o_focal
-python run_5fold.py --method V2 --fold 0 --ablation w/o_ctc
+python run_5fold.py --method V2 --fold 0 --ablation global_cm
 ```
 
 ## Citation

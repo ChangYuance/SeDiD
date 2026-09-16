@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""加载原始音频 + 三位医生标注，提供 DataLoader。
+"""Load raw audio + the three clinicians' annotations and provide DataLoaders.
 
-数据来源：
-  1. labels_三位医生标记.xlsx — 543 条，含万/师/第三位医生标记
-  2. doctor_review_summary.xlsx — 78 条 v2 患者，含统一标签
+Sources:
+  1. labels_三位医生标记.xlsx -- 543 samples, one label per clinician
+  2. doctor_review_summary.xlsx -- 78 v2 patients with a consensus label
 
-每条样本: speech【B, T_max】@16kHz, speech_lengths【B】, labels【B, 3】
+Per sample: speech [B, T_max] @16kHz, speech_lengths [B], labels [B, 3]
 """
 from __future__ import annotations
 import json, math, os
@@ -32,7 +32,7 @@ SOURCE_SR = 48000
 
 
 def _load_v2_metadata() -> dict[str, dict]:
-    """从 data_v2/{split}/data.list 读取所有样本的 key→{wav, split}。"""
+    """Read key -> {wav, split} for every sample from data_v2/{split}/data.list."""
     meta = {}
     for split in ["train", "val", "test"]:
         path = BASE_DIR / "data_v2" / split / "data.list"
@@ -45,12 +45,25 @@ def _load_v2_metadata() -> dict[str, dict]:
 
 
 def _load_doctor_labels() -> pd.DataFrame:
-    """读取 labels_三位医生标记.xlsx。"""
+    """Read labels_三位医生标记.xlsx.
+
+    The three annotator label column headers are named after the clinicians who
+    produced them, so they are not hard-coded here -- set CSD615_LABEL_COLUMNS
+    to the three header names, comma-separated in annotator order.
+    """
+    cols = [c.strip() for c in os.environ.get("CSD615_LABEL_COLUMNS", "").split(",") if c.strip()]
+    if len(cols) != 3:
+        raise RuntimeError(
+            "Set CSD615_LABEL_COLUMNS to the three annotator label column names, "
+            "comma-separated in annotator order (see README.md)."
+        )
+    col_a, col_b, col_c = cols
+
     df = pd.read_excel(EXCEL_LABELS)
     df["key"] = df["ID"].astype(str)
-    df["label_a"] = df["万_视频标签"].astype(int)
-    df["label_b"] = df["师_视频标签"].astype(int)
-    df["label_c"] = df["视频标记新"].fillna(df["万_视频标签"]).astype(int)
+    df["label_a"] = df[col_a].astype(int)
+    df["label_b"] = df[col_b].astype(int)
+    df["label_c"] = df[col_c].fillna(df[col_a]).astype(int)
     return df[["key", "label_a", "label_b", "label_c", "split"]]
 
 
@@ -67,7 +80,8 @@ def _load_v2_unified_labels() -> dict[str, int]:
 
 
 def build_label_dataframe() -> pd.DataFrame:
-    """合并标签来源，返回 DataFrame: key, split, label_a, label_b, label_c, wav_path。"""
+    """Merge the label sources; return a DataFrame with key, split, label_a,
+    label_b, label_c, wav_path."""
     meta = _load_v2_metadata()
     df_doctor = _load_doctor_labels()
     v2_unified = _load_v2_unified_labels()
@@ -137,7 +151,8 @@ def apply_speed_perturb(waveform: torch.Tensor, sr: int) -> torch.Tensor:
 
 
 class AudioMultiAnnotatorDataset(Dataset):
-    """加载原始音频 + 三位医生标签。首次加载时缓存所有音频到内存。"""
+    """Load raw audio + the three clinicians' labels. All audio is cached in memory
+    on first load."""
 
     def __init__(self, df: pd.DataFrame, augment: bool = False, extra_augment: bool = False, use_dict_features: bool = False):
         self.df = df.reset_index(drop=True)
@@ -155,7 +170,7 @@ class AudioMultiAnnotatorDataset(Dataset):
             self._dict_features = {k: _loaded[k] for k in _loaded.files}
 
     def _preload_all(self) -> list[torch.Tensor]:
-        """预加载所有音频到内存（mono, 16kHz）。"""
+        """Preload all audio into memory (mono, 16kHz)."""
         waveforms = []
         for idx in range(len(self.df)):
             row = self.df.iloc[idx]
@@ -235,7 +250,7 @@ def get_dataloaders(
     batch_size: int = 8,
     num_workers: int = 2,
 ) -> tuple[dict[str, DataLoader], pd.DataFrame]:
-    """返回 {'train': loader, 'val': loader, 'test': loader} 和完整 DataFrame。"""
+    """Return {'train': loader, 'val': loader, 'test': loader} and the full DataFrame."""
     df = build_label_dataframe()
 
     loaders = {}
