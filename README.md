@@ -15,13 +15,30 @@ The model fine-tunes the full SenseVoice encoder (221M parameters) on raw speech
 
 ## Results (5-fold, seed 42)
 
-| Method | Positive F1 | Macro F1 | 4-cls Acc |
-|--------|:-----------:|:--------:|:---------:|
-| **V2 (Ours, full)** | **0.7448** | **0.8511** | **0.8391** |
-| CrowdLayer | 0.6855 | 0.8133 | 0.8229 |
-| Tanno | 0.7289 | 0.8400 | 0.8260 |
+| Method | Pos. F1 | Macro F1 | 4-cls Acc |
+|--------|:-------:|:--------:|:---------:|
+| *Single-annotator* | | | |
+| MFCCStats | 0.4839 | 0.6647 | 0.7137 |
+| MFCCFusion | 0.5248 | 0.6033 | 0.5362 |
+| WhisperProbe-Mid | 0.6806 | 0.7861 | 0.7740 |
+| CoarseToFine | 0.7225 | 0.8178 | -- |
+| WhisperFT | 0.6752 | 0.7825 | 0.7724 |
+| *Multi-annotator* | | | |
+| CrowdLayer | 0.7962 | 0.8659 | 0.8375 |
+| CrowdAttention | 0.7760 | 0.8527 | 0.8214 |
+| COINNet | 0.8071 | 0.8723 | 0.8473 |
+| LFCx | 0.8048 | 0.8667 | 0.8099 |
+| Tanno | 0.8011 | 0.8689 | 0.8392 |
+| **Ours (SeDiD)** | **0.8331** | **0.8882** | **0.8489** |
 
-Per-fold V2 Positive F1 (seed 42): `[0.7500, 0.6857, 0.7692, 0.7500, 0.7692]`.
+## Ablation (5-fold, seed 42)
+
+| Variant | Pos. F1 | Macro F1 | 4-cls Acc |
+|---------|:-------:|:--------:|:---------:|
+| Ours (full) | 0.8331 | 0.8882 | 0.8489 |
+| w/o Multi-Annotator | 0.8022 | 0.8687 | 0.8327 |
+| w/o CTC | 0.8021 | 0.8693 | 0.8408 |
+| w/o Focal | 0.8035 | 0.8707 | 0.8457 |
 
 ## Repository structure
 
