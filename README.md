@@ -1,14 +1,14 @@
-# CMMA-Dysarthria
+# SeDiD
 
-**Confusion Matrix Guided Multi-Annotator Fusion (CMMA)** for dysarthria severity classification on SenseVoice.
+**SeDiD**: Learning from Clinician Severity Disagreement for Speech-Based Dysarthria Detection.
 
-This repository provides the reference implementation for the ICASSP 2027 submission "Confusion Matrix Guided Multi-Annotator Fusion for Dysarthria Severity Classification on SenseVoice".
+This repository provides the reference implementation for the ICASSP 2027 submission "Learning from Clinician Severity Disagreement for Speech-Based Dysarthria Detection".
 
 ## Method
 
 The model fine-tunes the full SenseVoice encoder (221M parameters) on raw speech and combines four objectives:
 
-1. **CMMA multi-annotator fusion** — an instance-dependent confusion matrix `M^k(x)` is generated per utterance for each annotator `k`, and each annotator's prediction is obtained as `q_k = pᵀ M^k(x)`, where `p` is the 4-class model output. The cross-entropy between `q_k` and annotator `k`'s label `y_k` aligns the model with each annotator's individual labeling behavior, in contrast to global (input-independent) confusion matrices.
+1. **SeDiD multi-annotator fusion** — an instance-dependent confusion matrix `M^k(x)` is generated per utterance for each annotator `k`, and each annotator's prediction is obtained as `q_k = pᵀ M^k(x)`, where `p` is the 4-class model output. The cross-entropy between `q_k` and annotator `k`'s label `y_k` aligns the model with each annotator's individual labeling behavior, in contrast to global (input-independent) confusion matrices.
 2. **Focal loss** on the D2 binary (severe vs. non-severe) head for class imbalance.
 3. **CTC auxiliary loss** on the counting task (phonetic regularization).
 4. **Trace regularization** on the confusion matrices.
@@ -26,7 +26,7 @@ Per-fold V2 Positive F1 (seed 42): `[0.7500, 0.6857, 0.7692, 0.7500, 0.7692]`.
 ## Repository structure
 
 ```
-model.py                  # SenseVoiceMultiAnnotator: CMMA fusion model (V2)
+model.py                  # SenseVoiceMultiAnnotator: SeDiD fusion model (V2)
 dys_model_sensevoice.py   # Vendored SenseVoice encoder module (required import)
 data_loader.py            # Audio + multi-annotator label loading
 run_5fold.py              # 5-fold training & evaluation for V2 and baselines
