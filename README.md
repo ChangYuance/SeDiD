@@ -62,29 +62,35 @@ Requires CUDA (a single GPU with ~24 GB memory; effective batch size 16 via batc
 
 ## Data access
 
-The CSD-615 dataset (615 Mandarin dysarthric speech samples recorded from 10 stroke centers, annotated by 3 clinicians on a 4-level severity scale) is **clinical data and is not publicly distributed**. The code expects the following local layout, configurable via environment variables:
+The corpus is **CSD-615** — 615 Mandarin dysarthric speech samples from 10 stroke
+centers, each independently rated by three senior clinicians on a 4-level severity
+scale. It has its own release: **https://github.com/aiot-ssmc/CSD-615**, which
+publishes the individual clinician ratings (`rater_a`, `rater_b`, `rater_c`) and the
+reference severity label (`median`) for every sample.
+
+The full audio is not redistributed here — request it through the CSD-615 release.
+The code expects the following local layout, configurable via environment variables:
 
 ```
 CSD615_ROOT/
 ├── training_data_v2/            # CSD615_TRAINING_DATA
 │   └── <sample_id>.wav
+├── data_v2/{train,val,test}/data.list   # audio keys -> wav paths
 ├── data/
-│   └── labels_三位医生标记.xlsx   # CSD615_LABELS (annotator labels)
+│   └── labels_三位医生标记.xlsx   # CSD615_LABELS (the three clinician ratings)
 └── results/
-    └── doctor_review_summary.xlsx  # CSD615_REVIEW (consensus labels)
+    └── doctor_review_summary.xlsx  # CSD615_REVIEW (reference labels)
+```
+
+The three rating column headers of the label table are dataset-specific and are not
+hard-coded in the source. Set them explicitly, in the corpus's clinician order
+(A, B, C); the third column is the one whose empty cells fall back to the first:
+
+```bash
+export CSD615_LABEL_COLUMNS="<clinician_a>,<clinician_b>,<clinician_c>"
 ```
 
 The pre-fine-tuned SenseVoice checkpoint used as the initialization for full fine-tuning is also not distributed; set `SENSEVOICE_CKPT` to a local copy.
-
-The three annotator label columns of `labels_三位医生标记.xlsx` are headed by the
-annotators' names, which are deliberately not committed here. Set
-`CSD615_LABEL_COLUMNS` to those three header names, comma-separated in
-annotator order — the third column is the one whose empty cells fall back to the
-first:
-
-```bash
-export CSD615_LABEL_COLUMNS="<col_a>,<col_b>,<col_c>"
-```
 
 
 ## Usage
