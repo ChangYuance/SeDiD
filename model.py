@@ -184,10 +184,9 @@ class ConfusionMatrix(nn.Module):
 
 # ── Main Model ──
 
-FINETUNED_CKPT = str(
-    Path(__file__).resolve().parent.parent / "exp"
-    / "sensevoice_multitask_unfreeze_all_v2" / "final.pt"
-)
+# Pre-fine-tuned SenseVoice checkpoint used to initialize the encoder. It is not
+# distributed -- set SENSEVOICE_CKPT to a local copy (see README.md).
+FINETUNED_CKPT = os.environ.get("SENSEVOICE_CKPT", "")
 
 
 class SenseVoiceMultiAnnotator(nn.Module):

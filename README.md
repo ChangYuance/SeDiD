@@ -69,28 +69,29 @@ publishes the individual clinician ratings (`rater_a`, `rater_b`, `rater_c`) and
 reference severity label (`median`) for every sample.
 
 The full audio is not redistributed here — request it through the CSD-615 release.
-The code expects the following local layout, configurable via environment variables:
+No dataset-internal file name or layout is hard-coded in the source; the corpus is
+read through environment variables:
 
-```
-CSD615_ROOT/
-├── training_data_v2/            # CSD615_TRAINING_DATA
-│   └── <sample_id>.wav
-├── data_v2/{train,val,test}/data.list   # audio keys -> wav paths
-├── data/
-│   └── labels_三位医生标记.xlsx   # CSD615_LABELS (the three clinician ratings)
-└── results/
-    └── doctor_review_summary.xlsx  # CSD615_REVIEW (reference labels)
-```
-
-The three rating column headers of the label table are dataset-specific and are not
-hard-coded in the source. Set them explicitly, in the corpus's clinician order
-(A, B, C); the third column is the one whose empty cells fall back to the first:
+| Variable | Meaning |
+|----------|---------|
+| `CSD615_DATA_LISTS` | directory holding `train/`, `val/` and `test/`, each with a `data.list` (one JSON object per line, mapping an audio key to its wav path) |
+| `CSD615_LABELS` | the per-clinician rating table (`.xlsx`) |
+| `CSD615_LABEL_COLUMNS` | the three annotator columns of `CSD615_LABELS`, comma-separated in annotator order (A, B, C); the third column's empty cells fall back to the first |
+| `CSD615_REVIEW` | the reference-label table (`.xlsx`), used for samples that carry no individual ratings |
+| `CSD615_REVIEW_COLUMN` | the reference-label column of `CSD615_REVIEW` |
+| `SENSEVOICE_CKPT` | local copy of the pre-fine-tuned SenseVoice checkpoint used to initialize full fine-tuning (also not distributed) |
 
 ```bash
+export CSD615_DATA_LISTS=/path/to/data_lists
+export CSD615_LABELS=/path/to/per_clinician_ratings.xlsx
 export CSD615_LABEL_COLUMNS="<clinician_a>,<clinician_b>,<clinician_c>"
+export CSD615_REVIEW=/path/to/reference_labels.xlsx
+export CSD615_REVIEW_COLUMN="<reference_column>"
+export SENSEVOICE_CKPT=/path/to/sensevoice.pt
 ```
 
-The pre-fine-tuned SenseVoice checkpoint used as the initialization for full fine-tuning is also not distributed; set `SENSEVOICE_CKPT` to a local copy.
+Column headers are dataset-specific (the rating columns are headed by the clinicians who
+produced them), so they are supplied through the environment rather than hard-coded.
 
 
 ## Usage

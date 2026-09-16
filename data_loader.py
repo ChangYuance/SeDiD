@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Load raw audio + the three clinicians' annotations and provide DataLoaders.
+"""Load raw audio and the CSD-615 clinician ratings, and provide DataLoaders.
 
-Sources:
-  1. labels_三位医生标记.xlsx -- 543 samples, one label per clinician
-  2. doctor_review_summary.xlsx -- 78 v2 patients with a consensus label
+The corpus is read through environment variables so that no dataset-internal
+file name or directory layout is hard-coded here: CSD615_DATA_LISTS points at
+the split files, CSD615_LABELS at the per-clinician rating table and
+CSD615_REVIEW at the reference-label table (see README.md).
 
 Per sample: speech [B, T_max] @16kHz, speech_lengths [B], labels [B, 3]
 """
@@ -20,23 +21,26 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 # CSD-615 is clinical data collected from 10 stroke centers and is not
-# publicly distributed. Point these environment variables to your local copy
-# of the dataset (see README.md for the expected layout).
-BASE_DIR = Path(__file__).resolve().parent.parent
-TRAINING_DATA = Path(os.environ.get("CSD615_TRAINING_DATA", str(BASE_DIR / "training_data_v2")))
-EXCEL_LABELS = Path(os.environ.get("CSD615_LABELS", str(BASE_DIR / "data" / "labels_三位医生标记.xlsx")))
-EXCEL_REVIEW = Path(os.environ.get("CSD615_REVIEW", str(BASE_DIR / "results" / "doctor_review_summary.xlsx")))
-
+# publicly distributed. Point the CSD615_* environment variables at your local
+# copy of the dataset (see README.md).
 TARGET_SR = 16000
 SOURCE_SR = 48000
 
 
-def _load_v2_metadata() -> dict[str, dict]:
-    """Read key -> {wav, split} for every sample from data_v2/{split}/data.list."""
+def _env_path(name: str, what: str) -> Path:
+    """Resolve a dataset path from the environment; no default is baked in."""
+    val = os.environ.get(name)
+    if not val:
+        raise RuntimeError(f"Set {name} to {what} (see README.md).")
+    return Path(val)
+
+
+def _load_split_metadata() -> dict[str, dict]:
+    """Read key -> {wav, split} for every sample from {split}/data.list."""
+    lists_dir = _env_path("CSD615_DATA_LISTS", "the directory holding the split files")
     meta = {}
     for split in ["train", "val", "test"]:
-        path = BASE_DIR / "data_v2" / split / "data.list"
-        with open(path) as f:
+        with open(lists_dir / split / "data.list") as f:
             for line in f:
                 if line.strip():
                     row = json.loads(line)
@@ -45,7 +49,7 @@ def _load_v2_metadata() -> dict[str, dict]:
 
 
 def _load_doctor_labels() -> pd.DataFrame:
-    """Read labels_三位医生标记.xlsx.
+    """Read the per-clinician rating table.
 
     The three annotator label column headers are named after the clinicians who
     produced them, so they are not hard-coded here -- set CSD615_LABEL_COLUMNS
@@ -59,7 +63,7 @@ def _load_doctor_labels() -> pd.DataFrame:
         )
     col_a, col_b, col_c = cols
 
-    df = pd.read_excel(EXCEL_LABELS)
+    df = pd.read_excel(_env_path("CSD615_LABELS", "the per-clinician rating table"))
     df["key"] = df["ID"].astype(str)
     df["label_a"] = df[col_a].astype(int)
     df["label_b"] = df[col_b].astype(int)
@@ -67,24 +71,40 @@ def _load_doctor_labels() -> pd.DataFrame:
     return df[["key", "label_a", "label_b", "label_c", "split"]]
 
 
-def _load_v2_unified_labels() -> dict[str, int]:
-    wb = openpyxl.load_workbook(EXCEL_REVIEW)
+def _load_reference_labels() -> dict[str, int]:
+    """Read sample ID -> reference label from the reference-label table.
+
+    The reference-label column is dataset-specific; set CSD615_REVIEW_COLUMN to
+    its header name.
+    """
+    col_name = os.environ.get("CSD615_REVIEW_COLUMN", "").strip()
+    if not col_name:
+        raise RuntimeError(
+            "Set CSD615_REVIEW_COLUMN to the reference-label column name of "
+            "CSD615_REVIEW (see README.md)."
+        )
+    wb = openpyxl.load_workbook(_env_path("CSD615_REVIEW", "the reference-label table"))
     ws = wb.active
+    header = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    if col_name not in header:
+        raise RuntimeError(f"Column {col_name!r} not found in CSD615_REVIEW.")
+    label_col = header.index(col_name) + 1
+
     labels = {}
     for row in range(2, ws.max_row + 1):
-        pid = str(ws.cell(row=row, column=1).value)
-        label = ws.cell(row=row, column=12).value
+        sample = str(ws.cell(row=row, column=1).value)  # first column: sample ID
+        label = ws.cell(row=row, column=label_col).value
         if label is not None:
-            labels[pid] = int(label)
+            labels[sample] = int(label)
     return labels
 
 
 def build_label_dataframe() -> pd.DataFrame:
     """Merge the label sources; return a DataFrame with key, split, label_a,
     label_b, label_c, wav_path."""
-    meta = _load_v2_metadata()
+    meta = _load_split_metadata()
     df_doctor = _load_doctor_labels()
-    v2_unified = _load_v2_unified_labels()
+    reference = _load_reference_labels()
 
     rows = []
     for key, info in meta.items():
@@ -96,8 +116,8 @@ def build_label_dataframe() -> pd.DataFrame:
                 "label_a": r["label_a"], "label_b": r["label_b"], "label_c": r["label_c"],
                 "wav_path": wav_path,
             })
-        elif key in v2_unified:
-            lbl = v2_unified[key]
+        elif key in reference:
+            lbl = reference[key]
             rows.append({
                 "key": key, "split": info["split"],
                 "label_a": lbl, "label_b": lbl, "label_c": lbl,
