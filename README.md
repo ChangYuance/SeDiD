@@ -79,8 +79,8 @@ The pre-fine-tuned SenseVoice checkpoint used as the initialization for full fin
 The three annotator label columns of `labels_三位医生标记.xlsx` are headed by the
 annotators' names, which are deliberately not committed here. Set
 `CSD615_LABEL_COLUMNS` to those three header names, comma-separated in
-annotator order (`A,B,C`; the third column is the one that falls back to `A`
-when empty):
+annotator order — the third column is the one whose empty cells fall back to the
+first:
 
 ```bash
 export CSD615_LABEL_COLUMNS="<col_a>,<col_b>,<col_c>"
